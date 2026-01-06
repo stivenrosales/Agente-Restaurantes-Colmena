@@ -644,7 +644,14 @@ app.get('/api/session/:sessionId', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-  console.log(`💬 Demo del Mesero Digital Colmena lista!`);
-});
+
+// Solo iniciar el servidor si NO estamos en un entorno serverless (Vercel)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`💬 Demo del Mesero Digital Colmena lista!`);
+  });
+}
+
+// Exportar la app para Vercel
+module.exports = app;
