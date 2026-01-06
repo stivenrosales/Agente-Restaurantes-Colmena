@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mesero Digital Colmena - Demo Interactiva</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <h1>🐝 Mesero Digital Colmena</h1>
+                <p>Demo Interactiva - Mesero 24/7 con IA</p>
+            </div>
+            <div class="status-badge" id="statusBadge">
+                <span class="status-dot"></span>
+                <span id="modeText">Modo: Configuración</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Chat Section -->
+            <div class="chat-section">
+                <div class="chat-header">
+                    <h2>💬 Chat con el Mesero</h2>
+                    <button class="btn-reset" onclick="resetSession()">🔄 Nueva Sesión</button>
+                </div>
+
+                <div class="chat-messages" id="chatMessages">
+                    <div class="welcome-message">
+                        <div class="welcome-icon">👋</div>
+                        <h3>¡Bienvenido a la Demo!</h3>
+                        <p>Escribe <strong>"Hola"</strong> para comenzar la configuración del mesero digital</p>
+                    </div>
+                </div>
+
+                <div class="chat-input-container">
+                    <input
+                        type="text"
+                        id="messageInput"
+                        placeholder="Escribe tu mensaje aquí..."
+                        onkeypress="handleKeyPress(event)"
+                    >
+                    <button onclick="sendMessage()" class="btn-send">
+                        Enviar ➤
+                    </button>
+                </div>
+            </div>
+
+            <!-- Actions Panel -->
+            <div class="actions-panel">
+                <div class="panel-header">
+                    <h2>⚡ Acciones del Agente</h2>
+                    <p class="subtitle">Visualización en tiempo real</p>
+                </div>
+
+                <!-- Configuration Display -->
+                <div class="config-display" id="configDisplay">
+                    <h3>📋 Configuración Actual</h3>
+                    <div class="config-grid" id="configGrid">
+                        <div class="config-item empty">
+                            <span class="config-label">Nombre del Mesero</span>
+                            <span class="config-value">No configurado</span>
+                        </div>
+                        <div class="config-item empty">
+                            <span class="config-label">Restaurante</span>
+                            <span class="config-value">No configurado</span>
+                        </div>
+                        <div class="config-item empty">
+                            <span class="config-label">Tipo de Producto</span>
+                            <span class="config-value">No configurado</span>
+                        </div>
+                        <div class="config-item empty">
+                            <span class="config-label">Productos Upselling</span>
+                            <span class="config-value">No configurado</span>
+                        </div>
+                        <div class="config-item empty">
+                            <span class="config-label">Horarios</span>
+                            <span class="config-value">No configurado</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress Tracker -->
+                <div class="progress-tracker" id="progressTracker">
+                    <h3>📊 Progreso de Configuración</h3>
+                    <div class="progress-steps">
+                        <div class="step" data-step="1">
+                            <div class="step-circle">1</div>
+                            <span>Presentación</span>
+                        </div>
+                        <div class="step" data-step="2">
+                            <div class="step-circle">2</div>
+                            <span>Nombre</span>
+                        </div>
+                        <div class="step" data-step="3">
+                            <div class="step-circle">3</div>
+                            <span>Productos</span>
+                        </div>
+                        <div class="step" data-step="4">
+                            <div class="step-circle">4</div>
+                            <span>Upselling</span>
+                        </div>
+                        <div class="step" data-step="5">
+                            <div class="step-circle">5</div>
+                            <span>Horarios</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tool Calls Display -->
+                <div class="tools-display" id="toolsDisplay">
+                    <h3>🔧 Herramientas Utilizadas</h3>
+                    <div class="tools-list" id="toolsList">
+                        <p class="empty-state">Las herramientas aparecerán aquí cuando el agente las use</p>
+                    </div>
+                </div>
+
+                <!-- Orders Display (shown in attention mode) -->
+                <div class="orders-display" id="ordersDisplay" style="display: none;">
+                    <h3>🛒 Pedidos Registrados</h3>
+                    <div class="orders-list" id="ordersList">
+                        <p class="empty-state">Los pedidos aparecerán aquí</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
