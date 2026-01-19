@@ -19,13 +19,17 @@ app.use(express.static(path.join(__dirname, 'public')));
 const SESSIONS_FILE = path.join(__dirname, 'sessions.json');
 let sessions = {};
 
+// Default address (inventado) - usado solo si el usuario no proporciona uno
+const DEFAULT_ADDRESS = {
+  direccion: 'Av. Insurgentes Sur 1234, Col. Del Valle, Benito Juárez, CDMX',
+  maps_link: 'https://maps.google.com/?q=19.3846,-99.1786'
+};
+
 try {
   if (fs.existsSync(SESSIONS_FILE)) {
-    // Basic load
     const data = fs.readFileSync(SESSIONS_FILE, 'utf8');
     sessions = JSON.parse(data);
 
-    // Rehydrate history - simplified
     Object.keys(sessions).forEach(key => {
       if (sessions[key].history) {
         sessions[key].history = sessions[key].history.map(msg => {
@@ -42,10 +46,8 @@ try {
   sessions = {};
 }
 
-// EXPORT TO ALLOW FALLBACK SAVING
 exports.sessions = sessions;
 
-// Helper to save sessions
 function saveSessionsToFile() {
   try {
     fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2));
@@ -54,201 +56,44 @@ function saveSessionsToFile() {
   }
 }
 
-const updateConfigTool = new DynamicStructuredTool({
-  name: 'actualizar_configuracion',
-  description: 'Actualiza la configuración del mesero digital con los datos proporcionados por el dueño del restaurante',
-  schema: z.object({
-    campo: z.enum(['nombre_mesero', 'nombre_restaurante', 'tipo_producto', 'productos_upselling', 'horarios']).describe('El campo de configuración a actualizar'),
-    valor: z.string().describe('El valor para ese campo')
-  }),
-  func: async ({ campo, valor }, runManager) => {
-    const sessionId = runManager?.metadata?.sessionId || 'default';
-    if (!sessions[sessionId]) {
-      sessions[sessionId] = { config: {} };
-    }
-    sessions[sessionId].config[campo] = valor;
-    return JSON.stringify({
-      accion: 'configuracion_actualizada',
-      campo,
-      valor,
-      config_actual: sessions[sessionId].config
-    });
-  }
-});
-
-const mostrarOpcionesTool = new DynamicStructuredTool({
-  name: 'mostrar_opciones',
-  description: 'Muestra opciones visuales al usuario para que seleccione',
-  schema: z.object({
-    pregunta: z.string().describe('La pregunta a mostrar'),
-    opciones: z.array(z.string()).describe('Lista de opciones disponibles')
-  }),
-  func: async ({ pregunta, opciones }) => {
-    return JSON.stringify({
-      accion: 'mostrar_opciones',
-      pregunta,
-      opciones
-    });
-  }
-});
-
-const confirmarPasoTool = new DynamicStructuredTool({
-  name: 'confirmar_paso',
-  description: 'Confirma que un paso de la configuración se completó correctamente',
-  schema: z.object({
-    paso: z.number().describe('Número del paso completado (1-5)'),
-    descripcion: z.string().describe('Descripción de lo que se completó')
-  }),
-  func: async ({ paso, descripcion }) => {
-    return JSON.stringify({
-      accion: 'paso_completado',
-      paso,
-      descripcion
-    });
-  }
-});
-
-const cambiarModoTool = new DynamicStructuredTool({
-  name: 'cambiar_modo',
-  description: 'Cambia el modo de operación del mesero (configuracion o atencion)',
-  schema: z.object({
-    modo: z.enum(['configuracion', 'atencion']).describe('El modo al que cambiar'),
-    mensaje: z.string().describe('Mensaje para el usuario')
-  }),
-  func: async ({ modo, mensaje }, runManager) => {
-    const sessionId = runManager?.metadata?.sessionId || 'default';
-    if (!sessions[sessionId]) {
-      sessions[sessionId] = { config: {}, mode: 'configuracion' };
-    }
-    sessions[sessionId].mode = modo;
-    return JSON.stringify({
-      accion: 'modo_cambiado',
-      modo,
-      mensaje
-    });
-  }
-});
-
-const tomarPedidoTool = new DynamicStructuredTool({
-  name: 'tomar_pedido',
-  description: 'Registra un pedido del cliente con los productos solicitados',
-  schema: z.object({
-    productos: z.array(z.string()).describe('Lista de productos pedidos'),
-    cantidad_total: z.number().describe('Cantidad total de items')
-  }),
-  func: async ({ productos, cantidad_total }, runManager) => {
-    const sessionId = runManager?.metadata?.sessionId || 'default';
-    if (!sessions[sessionId]) {
-      sessions[sessionId] = { config: {}, pedidos: [] };
-    }
-    if (!sessions[sessionId].pedidos) {
-      sessions[sessionId].pedidos = [];
-    }
-    const pedido = {
-      id: sessions[sessionId].pedidos.length + 1,
-      productos,
-      cantidad_total,
-      timestamp: new Date().toISOString()
-    };
-    sessions[sessionId].pedidos.push(pedido);
-    return JSON.stringify({
-      accion: 'pedido_registrado',
-      pedido
-    });
-  }
-});
-
-const sugerirUpsellTool = new DynamicStructuredTool({
-  name: 'sugerir_upsell',
-  description: 'Sugiere productos adicionales al cliente para aumentar el ticket promedio',
-  schema: z.object({
-    productos_sugeridos: z.array(z.string()).describe('Productos que se sugieren al cliente')
-  }),
-  func: async ({ productos_sugeridos }) => {
-    return JSON.stringify({
-      accion: 'upsell_sugerido',
-      productos_sugeridos
-    });
-  }
-});
-
-const tools = [
-  updateConfigTool,
-  mostrarOpcionesTool,
-  confirmarPasoTool,
-  cambiarModoTool,
-  tomarPedidoTool,
-  sugerirUpsellTool
-];
-
 const prompt = ChatPromptTemplate.fromMessages([
-  ['system', `Eres un mesero digital inteligente para restaurantes que funciona 24/7.
-  
-  Tu objetivo principal es:
-  1. CONFIGURACIÓN: Ayudar al dueño del restaurante a configurarte en 5 pasos.
-  2. ATENCIÓN: Atender pedidos de clientes y maximizar ventas con upselling.
+  ['system', `Eres COLMENA, mesero digital para restaurantes.
 
-  ESTADO ACTUAL DE LA SESIÓN: {system_state}
+ESTADO: {system_state}
 
-  MODO CONFIGURACIÓN (se activa cuando el estado es "configuracion"):
-  
-  Paso 1 - PRESENTACIÓN:
-  - Di exactamente: "👋 ¡Hola! Soy el mesero digital que va a atender a tus clientes por WhatsApp. Vamos a configurarme en 4 pasos."
-  - Luego pregunta: "¿Cómo quieres que me llame? (Ejemplo: Pepe, Lupita, Tito, etc.)"
-  
-  Paso 2 - NOMBRE DEL MESERO Y RESTAURANTE:
-  - Cuando den el nombre, DEBES llamar primero la tool "actualizar_configuracion" con campo "nombre_mesero" y el valor dado
-  - Luego di "Perfecto 🙌 ¿En qué restaurante voy a trabajar?"
-  - Cuando den el restaurante, DEBES llamar la tool "actualizar_configuracion" con campo "nombre_restaurante" y el valor dado
-  - Luego di "Listo. Soy [nombre], el mesero digital de [restaurante] 🌮"
-  - DEBES llamar la tool "confirmar_paso" con paso 1
-  
-  Paso 3 - TIPO DE PRODUCTOS:
-  - Pregunta: "¿Qué tipo de comida vendes principalmente?"
-  - DEBES llamar la tool "mostrar_opciones" con opciones: ["Tacos", "Pizzas", "Hamburguesas", "Alitas", "Otro"]
-  - Cuando respondan, DEBES llamar la tool "actualizar_configuracion" con campo "tipo_producto" y el valor dado
-  - Luego di "Perfecto. Voy a ofrecer tus [productos] de forma clara y rápida para que no se pierdan pedidos."
-  - DEBES llamar la tool "confirmar_paso" con paso 2
-  
-  Paso 4 - PRODUCTOS UPSELLING (MUY IMPORTANTE):
-  - Pregunta: "Cuando tus clientes pidan, ¿qué productos te gustaría que siempre les sugiera para aumentar la venta? (Ejemplo: refrescos, papas, postres, extras)"
-  - Cuando respondan, DEBES llamar la tool "actualizar_configuracion" con campo "productos_upselling" y el valor dado
-  - Luego di "Excelente 😎 Cada vez que alguien haga un pedido, les sugeriré [productos] de forma automática."
-  - DEBES llamar la tool "confirmar_paso" con paso 3
-  
-  Paso 5 - HORARIOS:
-  - Pregunta: "¿Cuáles son tus horarios de atención?"
-  - Cuando respondan, DEBES llamar la tool "actualizar_configuracion" con campo "horarios" y el valor dado
-  - Luego di "Perfecto. Atenderé pedidos de [horarios]. Fuera de ese horario, avisaré a tus clientes y tomaré mensajes."
-  - DEBES llamar la tool "confirmar_paso" con paso 4
-  
-  CIERRE DE CONFIGURACIÓN:
-  - Di: "Listo 🎉 Ya estoy configurado y listo para atender como tu mesero digital. Ahora, actúa como si fueras uno de tus clientes y hazme un pedido 👇"
-  - DEBES llamar la tool "confirmar_paso" con paso 5
-  - DEBES llamar la tool "cambiar_modo" con modo "atencion"
-  
-  MODO ATENCIÓN (se activa cuando el estado es "atencion"):
-  - YA NO PIDAS CONFIGURACIÓN.
-  - Saluda amigablemente si es necesario.
-  
-  FLUJO DE PEDIDO (IMPORTANTE):
-  1. CUANDO EL CLIENTE PIDE ALGO:
-     - NO registres el pedido todavía.
-     - DEBES llamar la tool "sugerir_upsell" inmediatamente para ofrecer complementos.
-     - Responde: "Anotado [producto]. ¿Te gustaría agregar [complemento] por un poco más?"
-  
-  2. CUANDO EL CLIENTE RESPONDE AL UPSELLING (Sí o No):
-     - Confirma el pedido FINAL completo.
-     - Di: "Perfecto. Confirmo tu orden: [resumen completo]. ¿Es correcto?"
-  
-  3. SOLO CUANDO EL CLIENTE CONFIRMA (Dice "Sí", "Correcto", "Ok"):
-     - ENTONCES y SOLO ENTONCES llama la tool "tomar_pedido" con TODOS los productos juntos.
-     - Di: "¡Excelente! Tu pedido ha sido registrado (Ticket generado)."
+=== SI MODO ES "atencion" ===
+NO pidas configuración. Eres el mesero del restaurante. Saluda, muestra menú, toma pedidos.
+- Sugiere upselling con tool "sugerir_upsell"
+- Pregunta: domicilio o sucursal
+- Pregunta forma de pago
+- Usa tool "calcular" para totales
+- Usa tool "tomar_pedido" para registrar
 
-  REGLAS CRÍTICAS DE REGISTRO:
-  - NUNCA uses "tomar_pedido" antes de que el cliente confirme el total.
-  - El ticket debe generarse UNA SOLA VEZ con todo incluido.
-  `],
+=== SI MODO ES "configuracion" ===
+
+FLUJO SIMPLIFICADO (3 interacciones):
+
+PRIMERA INTERACCIÓN (cuando dicen "Hola" o similar):
+1. Saluda: "👋 ¡Hola! Soy COLMENA, tu mesero digital. Te ayudaré a configurar tu restaurante en segundos."
+2. Pregunta: "¿Cómo te llamas, cuál es el nombre de tu restaurante y qué tipo de comida vendes? (Ej: tacos, pizzas, hamburguesas, alitas, sushi, comida peruana, etc.)"
+
+SEGUNDA INTERACCIÓN (cuando dan la información):
+1. Llama tool "configuracion_rapida" con:
+   - nombre_usuario: el nombre que dieron
+   - nombre_restaurante: el nombre del restaurante
+   - tipo_comida: el tipo de comida que mencionaron (tacos/pizzas/hamburguesas/alitas/otro)
+2. Esta tool generará automáticamente: menú con precios, upselling, horarios y dirección
+3. Muestra el resumen generado y pregunta: "¿Te parece bien? Puedes pedirme cambiar cualquier detalle."
+
+TERCERA INTERACCIÓN (cuando confirman):
+1. Llama tool "activar_modo_atencion" con confirmacion=true
+2. El sistema mostrará la transición automáticamente
+
+REGLAS:
+- Sé conciso y amigable
+- Si dicen "sí", "ok", "vale", "perfecto", "está bien" → es confirmación
+- Si quieren cambiar algo, usa las tools correspondientes y vuelve a preguntar
+`],
   new MessagesPlaceholder('chat_history'),
   ['human', '{input}'],
   new MessagesPlaceholder('agent_scratchpad')
@@ -260,186 +105,321 @@ const llm = new ChatOpenAI({
   temperature: 0.7
 });
 
-// Función para parsear acciones automáticamente del texto
-function parseAutoActions(userMessage, agentResponse, session) {
+function parseAutoActions(userMessage, agentResponse, session, toolCallsExecuted) {
   const actions = [];
-  const lowerResponse = agentResponse.toLowerCase();
-  const lowerMessage = userMessage.toLowerCase();
-
-  // Detectar si es fase de configuración
-  if (!session.mode || session.mode === 'configuracion') {
-    // Detectar nombre del mesero
-    if (lowerResponse.includes('perfecto') && lowerResponse.includes('restaurante')) {
-      const nombre = userMessage.trim();
-      if (nombre && nombre.length < 30) {
-        session.config.nombre_mesero = nombre;
-        actions.push({
-          tipo: 'config_actualizada',
-          campo: 'nombre_mesero',
-          valor: nombre
-        });
-      }
-    }
-
-    // Detectar nombre del restaurante
-    if (lowerResponse.includes('listo. soy') || lowerResponse.includes('mesero digital de')) {
-      const matches = userMessage.match(/^[A-Za-zÀ-ÿ0-9\s]+$/);
-      if (matches && userMessage.length < 50) {
-        session.config.nombre_restaurante = userMessage.trim();
-        actions.push({
-          tipo: 'config_actualizada',
-          campo: 'nombre_restaurante',
-          valor: userMessage.trim()
-        });
-      }
-    }
-
-    // Detectar tipo de producto
-    if (lowerMessage.includes('tacos') || lowerMessage.includes('pizzas') ||
-      lowerMessage.includes('hamburguesas') || lowerMessage.includes('alitas')) {
-      session.config.tipo_producto = userMessage.trim();
-      actions.push({
-        tipo: 'config_actualizada',
-        campo: 'tipo_producto',
-        valor: userMessage.trim()
-      });
-    }
-
-    // Detectar productos upselling
-    if (lowerResponse.includes('sugeriré') && (lowerMessage.includes('refrescos') ||
-      lowerMessage.includes('papas') || lowerMessage.includes('postres'))) {
-      session.config.productos_upselling = userMessage.trim();
-      actions.push({
-        tipo: 'config_actualizada',
-        campo: 'productos_upselling',
-        valor: userMessage.trim()
-      });
-    }
-
-    // Detectar horarios
-    if (lowerResponse.includes('atenderé pedidos') || lowerMessage.includes('lunes')) {
-      session.config.horarios = userMessage.trim();
-      actions.push({
-        tipo: 'config_actualizada',
-        campo: 'horarios',
-        valor: userMessage.trim()
-      });
-    }
-
-    // Detectar fin de configuración
-    if (lowerResponse.includes('ya estoy configurado') || lowerResponse.includes('actúa como si fueras')) {
-      session.mode = 'atencion';
-      actions.push({
-        tipo: 'modo_cambiado',
-        modo: 'atencion'
-      });
-    }
-  }
-
-  // Detectar pedidos en modo atención
-  if (session.mode === 'atencion') {
-    // Detectar pedido
-    const pedidoPatterns = [
-      /quiero\s+(\d+)\s+(.*)/i,
-      /(\d+)\s+(tacos?|pizzas?|hamburguesas?|alitas?)/i,
-      /dame\s+(.*)/i,
-      /pido\s+(.*)/i
-    ];
-
-    for (const pattern of pedidoPatterns) {
-      const match = lowerMessage.match(pattern);
-      if (match && lowerResponse.includes('anoto')) {
-        if (!session.pedidos) session.pedidos = [];
-
-        const pedido = {
-          id: session.pedidos.length + 1,
-          productos: [userMessage],
-          timestamp: new Date().toISOString(),
-          estado: 'registrado'
-        };
-
-        session.pedidos.push(pedido);
-
-        actions.push({
-          tipo: 'pedido_registrado',
-          pedido
-        });
-        break;
-      }
-    }
-
-    // Detectar upselling
-    if ((lowerResponse.includes('agregar') || lowerResponse.includes('gustaría')) &&
-      (lowerResponse.includes('refrescos') || lowerResponse.includes('papas'))) {
-      actions.push({
-        tipo: 'upselling_ofrecido',
-        productos: session.config.productos_upselling || 'productos adicionales'
-      });
-    }
-
-    // Detectar aceptación de upselling
-    if ((lowerMessage.includes('sí') || lowerMessage.includes('si') ||
-      lowerMessage.includes('agrégame') || lowerMessage.includes('dame')) &&
-      (lowerMessage.includes('refresco') || lowerMessage.includes('papa'))) {
-
-      if (!session.pedidos) session.pedidos = [];
-
-      const pedido = {
-        id: session.pedidos.length + 1,
-        productos: [userMessage],
-        timestamp: new Date().toISOString(),
-        estado: 'adicional',
-        esUpselling: true
-      };
-
-      session.pedidos.push(pedido);
-
-      actions.push({
-        tipo: 'upselling_aceptado',
-        pedido
-      });
-    }
-  }
-
+  // Only trigger mode change via tool now, not via text detection
+  // This prevents premature mode changes
   return actions;
+}
+
+// Check if all configuration steps are complete
+function isConfigurationComplete(config) {
+  const requiredFields = ['nombre_mesero', 'nombre_restaurante', 'tipo_producto', 'horarios', 'direccion'];
+  const hasAllFields = requiredFields.every(field => config[field] && config[field].trim() !== '');
+  const hasMenu = config.menu_productos && config.menu_productos.length > 0;
+  return hasAllFields && hasMenu;
 }
 
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, sessionId = 'default' } = req.body;
 
-    // Initialize session if not exists
     if (!sessions[sessionId]) {
       sessions[sessionId] = {
         config: {},
         mode: 'configuracion',
         history: [],
-        pedidos: []
+        pedidos: [],
+        pasos_completados: []
       };
     }
 
     const session = sessions[sessionId];
     session.history.push(new HumanMessage(message));
 
-    // --- TOOL DEFINITIONS WITH CLOSED-OVER SESSIONID ---
-
-    // Helper to save session state immediately
-    // Helper to save session state immediately
     const saveSession = () => {
       saveSessionsToFile();
     };
 
+    // Get restaurant address
+    const restaurantAddress = session.config.direccion || DEFAULT_ADDRESS.direccion;
+    const mapsLink = session.config.maps_link || DEFAULT_ADDRESS.maps_link;
+
+    // Get menu if exists
+    const menuStr = session.config.menu_productos
+      ? session.config.menu_productos.map((p, i) => `${i + 1}. ${p.nombre} - $${p.precio}`).join('\n')
+      : 'No configurado aún';
+
+    // NEW: Quick configuration tool - generates everything automatically
+    const configuracionRapidaTool = new DynamicStructuredTool({
+      name: 'configuracion_rapida',
+      description: 'Configura TODO el restaurante automáticamente. Genera menú, upselling, horarios y dirección basándose en el tipo de negocio.',
+      schema: z.object({
+        nombre_usuario: z.string().describe('Nombre del dueño/mesero'),
+        nombre_restaurante: z.string().describe('Nombre del restaurante'),
+        tipo_comida: z.string().describe('Tipo de comida: tacos, pizzas, hamburguesas, alitas, sushi, mariscos, pollo, cafe, peruana, mexicana, otro')
+      }),
+      func: async ({ nombre_usuario, nombre_restaurante, tipo_comida }) => {
+        // Normalize the food type
+        const tipoLower = (tipo_comida || '').toLowerCase();
+        let tipo = 'otro';
+
+        if (tipoLower.includes('taco')) tipo = 'tacos';
+        else if (tipoLower.includes('pizza')) tipo = 'pizzas';
+        else if (tipoLower.includes('burger') || tipoLower.includes('hambur')) tipo = 'hamburguesas';
+        else if (tipoLower.includes('alita') || tipoLower.includes('wing')) tipo = 'alitas';
+        else if (tipoLower.includes('sushi') || tipoLower.includes('japon')) tipo = 'sushi';
+        else if (tipoLower.includes('marisco') || tipoLower.includes('pescado')) tipo = 'mariscos';
+        else if (tipoLower.includes('pollo') || tipoLower.includes('rostizado')) tipo = 'pollo';
+        else if (tipoLower.includes('cafe') || tipoLower.includes('café') || tipoLower.includes('coffee')) tipo = 'cafe';
+        else if (tipoLower.includes('peru')) tipo = 'peruana';
+        else if (tipoLower.includes('mexic')) tipo = 'mexicana';
+
+        // Generate menu based on type
+        const menus = {
+          'tacos': [
+            { nombre: 'Taco al Pastor', precio: 25 },
+            { nombre: 'Taco de Bistec', precio: 28 },
+            { nombre: 'Taco de Carnitas', precio: 27 },
+            { nombre: 'Taco de Suadero', precio: 26 },
+            { nombre: 'Orden de Quesadillas (3)', precio: 55 }
+          ],
+          'pizzas': [
+            { nombre: 'Pizza Pepperoni Personal', precio: 89 },
+            { nombre: 'Pizza Hawaiana Mediana', precio: 159 },
+            { nombre: 'Pizza 4 Quesos Grande', precio: 199 },
+            { nombre: 'Pizza Mexicana Familiar', precio: 249 }
+          ],
+          'hamburguesas': [
+            { nombre: 'Hamburguesa Clásica', precio: 79 },
+            { nombre: 'Hamburguesa con Queso', precio: 89 },
+            { nombre: 'Hamburguesa Doble', precio: 115 },
+            { nombre: 'Hamburguesa BBQ Bacon', precio: 105 },
+            { nombre: 'Papas Fritas', precio: 45 }
+          ],
+          'alitas': [
+            { nombre: 'Alitas BBQ (6 pz)', precio: 89 },
+            { nombre: 'Alitas Buffalo (12 pz)', precio: 159 },
+            { nombre: 'Alitas Mixtas (18 pz)', precio: 219 },
+            { nombre: 'Boneless (orden)', precio: 99 }
+          ],
+          'sushi': [
+            { nombre: 'Roll California (8 pz)', precio: 120 },
+            { nombre: 'Roll Filadelfia (8 pz)', precio: 135 },
+            { nombre: 'Roll Spicy Tuna (8 pz)', precio: 145 },
+            { nombre: 'Nigiri Mixto (6 pz)', precio: 160 },
+            { nombre: 'Combo Sushi (20 pz)', precio: 299 }
+          ],
+          'mariscos': [
+            { nombre: 'Cóctel de Camarón', precio: 120 },
+            { nombre: 'Ceviche de Pescado', precio: 95 },
+            { nombre: 'Aguachile Verde', precio: 140 },
+            { nombre: 'Tostada de Mariscos', precio: 65 },
+            { nombre: 'Pescado Zarandeado', precio: 180 }
+          ],
+          'pollo': [
+            { nombre: 'Pollo Rostizado (entero)', precio: 149 },
+            { nombre: 'Medio Pollo', precio: 85 },
+            { nombre: 'Cuarto de Pollo', precio: 55 },
+            { nombre: 'Pechuga Asada', precio: 75 },
+            { nombre: 'Pierna con Arroz', precio: 65 }
+          ],
+          'cafe': [
+            { nombre: 'Café Americano', precio: 35 },
+            { nombre: 'Cappuccino', precio: 55 },
+            { nombre: 'Latte', precio: 60 },
+            { nombre: 'Frappe Mokka', precio: 75 },
+            { nombre: 'Croissant', precio: 45 }
+          ],
+          'peruana': [
+            { nombre: 'Ceviche Clásico', precio: 120 },
+            { nombre: 'Lomo Saltado', precio: 140 },
+            { nombre: 'Ají de Gallina', precio: 110 },
+            { nombre: 'Arroz con Mariscos', precio: 150 },
+            { nombre: 'Causa Limeña', precio: 85 }
+          ],
+          'mexicana': [
+            { nombre: 'Enchiladas Rojas', precio: 85 },
+            { nombre: 'Chilaquiles', precio: 75 },
+            { nombre: 'Pozole', precio: 95 },
+            { nombre: 'Quesadillas de Huitlacoche', precio: 70 },
+            { nombre: 'Tamal Oaxaqueño', precio: 45 }
+          ],
+          'otro': [
+            { nombre: 'Platillo del Día', precio: 85 },
+            { nombre: 'Platillo Especial', precio: 120 },
+            { nombre: 'Entrada', precio: 55 },
+            { nombre: 'Guarnición', precio: 35 },
+            { nombre: 'Postre', precio: 45 }
+          ]
+        };
+
+        const upselling = [
+          { nombre: 'Refresco 600ml', precio: 25 },
+          { nombre: 'Agua Mineral', precio: 20 },
+          { nombre: 'Postre del Día', precio: 35 }
+        ];
+
+        // Save all config
+        session.config = {
+          nombre_mesero: nombre_usuario,
+          nombre_restaurante: nombre_restaurante,
+          tipo_producto: tipo.charAt(0).toUpperCase() + tipo.slice(1),
+          menu_productos: menus[tipo] || menus['otro'],
+          productos_upselling: upselling,
+          productos_upselling_texto: upselling.map(p => `${p.nombre} $${p.precio}`).join(', '),
+          horarios: 'Lunes a Domingo de 12:00 PM a 10:00 PM',
+          direccion: 'Av. Principal #123, Centro',
+          maps_link: 'https://maps.google.com/?q=Av.+Principal+123'
+        };
+
+        session.pasos_completados = [1, 2, 3, 4]; // Mark first 4 steps as complete
+        saveSession();
+
+        const menuFormateado = session.config.menu_productos.map((p, i) => `  ${i + 1}. ${p.nombre} - $${p.precio}`).join('\n');
+
+        return JSON.stringify({
+          accion: 'configuracion_generada',
+          config: session.config,
+          resumen: `
+🤖 Mesero: ${nombre_usuario}
+🏪 Restaurante: ${nombre_restaurante}
+🍽️ Tipo: ${session.config.tipo_producto}
+
+📋 Menú:
+${menuFormateado}
+
+💰 Productos Upselling: ${session.config.productos_upselling_texto}
+🕐 Horarios: ${session.config.horarios}
+📍 Dirección: ${session.config.direccion}
+          `.trim()
+        });
+      }
+    });
+
+    // NEW: Activate attention mode
+    const activarModoAtencionTool = new DynamicStructuredTool({
+      name: 'activar_modo_atencion',
+      description: 'Activa el modo atención después de que el usuario confirme la configuración. Úsalo cuando digan "sí", "ok", "vale", "perfecto", etc.',
+      schema: z.object({
+        confirmacion: z.boolean().describe('true si el usuario confirmó')
+      }),
+      func: async ({ confirmacion }) => {
+        if (!confirmacion) {
+          return JSON.stringify({ accion: 'esperando_confirmacion', mensaje: 'Pregunta al usuario si quiere modificar algo' });
+        }
+
+        session.pasos_completados = [1, 2, 3, 4, 5];
+        session.mode = 'atencion';
+        saveSession();
+
+        const mensajeBienvenida = `¡Hola! Bienvenido a ${session.config.nombre_restaurante}. Soy ${session.config.nombre_mesero} 🤖\n\nEste es nuestro menú:\n${session.config.menu_productos?.map((p, i) => `${i + 1}. ${p.nombre} - $${p.precio}`).join('\n')}\n\n¿Qué te gustaría ordenar?`;
+
+        return JSON.stringify({
+          accion: 'configuracion_completada_y_modo_cambiado',
+          modo: 'atencion',
+          mensaje_bienvenida: mensajeBienvenida,
+          config: session.config
+        });
+      }
+    });
+
     const updateConfigTool = new DynamicStructuredTool({
       name: 'actualizar_configuracion',
-      description: 'Actualiza la configuración del mesero digital. ÚSALO cuando el usuario te de un dato: nombre, restaurante, tipo de comida, horarios.',
+      description: 'Actualiza un campo específico de la configuración.',
       schema: z.object({
-        campo: z.enum(['nombre_mesero', 'nombre_restaurante', 'tipo_producto', 'productos_upselling', 'horarios']),
+        campo: z.enum(['nombre_mesero', 'nombre_restaurante', 'tipo_producto', 'horarios', 'direccion']),
         valor: z.string()
       }),
       func: async ({ campo, valor }) => {
         session.config[campo] = valor;
+
+        if (campo === 'direccion') {
+          session.config.maps_link = `https://maps.google.com/?q=${encodeURIComponent(valor)}`;
+        }
+
         saveSession();
         return JSON.stringify({ accion: 'configuracion_actualizada', campo, valor });
+      }
+    });
+
+    const generarMenuTool = new DynamicStructuredTool({
+      name: 'generar_menu',
+      description: 'Genera el menú personalizado basado en los productos que el usuario proporciona. Úsalo cuando el usuario te diga sus productos y precios.',
+      schema: z.object({
+        productos: z.array(z.object({
+          nombre: z.string().describe('Nombre del producto'),
+          precio: z.number().describe('Precio del producto en pesos')
+        })).describe('Lista de productos con sus precios')
+      }),
+      func: async ({ productos }) => {
+        session.config.menu_productos = productos;
+        session.config.tipo_producto = session.config.tipo_producto || 'Comida';
+        saveSession();
+
+        const menuFormateado = productos.map((p, i) => `${i + 1}. ${p.nombre} - $${p.precio}`).join('\n');
+        return JSON.stringify({
+          accion: 'menu_generado',
+          productos,
+          menu_formateado: menuFormateado,
+          mensaje: `Menú personalizado guardado con ${productos.length} productos`
+        });
+      }
+    });
+
+    const generarUpsellingTool = new DynamicStructuredTool({
+      name: 'generar_upselling',
+      description: 'Guarda los productos de upselling proporcionados por el usuario.',
+      schema: z.object({
+        productos: z.array(z.object({
+          nombre: z.string().describe('Nombre del producto de upselling'),
+          precio: z.number().describe('Precio del producto')
+        })).describe('Lista de productos de upselling con precios')
+      }),
+      func: async ({ productos }) => {
+        session.config.productos_upselling = productos;
+        session.config.productos_upselling_texto = productos.map(p => `${p.nombre} $${p.precio}`).join(', ');
+        saveSession();
+        return JSON.stringify({
+          accion: 'upselling_configurado',
+          productos,
+          mensaje: `Productos de upselling guardados: ${productos.map(p => p.nombre).join(', ')}`
+        });
+      }
+    });
+
+    const calcularTool = new DynamicStructuredTool({
+      name: 'calcular',
+      description: 'Realiza operaciones matemáticas básicas. SIEMPRE usa esta herramienta para sumas, restas y multiplicaciones de precios.',
+      schema: z.object({
+        operacion: z.enum(['suma', 'resta', 'multiplicacion', 'total']).describe('Tipo de operación'),
+        numeros: z.array(z.number()).describe('Lista de números para la operación'),
+        descripcion: z.string().optional().describe('Descripción de qué se está calculando')
+      }),
+      func: async ({ operacion, numeros, descripcion }) => {
+        let resultado;
+        switch (operacion) {
+          case 'suma':
+          case 'total':
+            resultado = numeros.reduce((a, b) => a + b, 0);
+            break;
+          case 'resta':
+            resultado = numeros.reduce((a, b) => a - b);
+            break;
+          case 'multiplicacion':
+            resultado = numeros.reduce((a, b) => a * b, 1);
+            break;
+          default:
+            resultado = 0;
+        }
+        return JSON.stringify({
+          accion: 'calculo_realizado',
+          operacion,
+          numeros,
+          resultado,
+          descripcion: descripcion || `Resultado de ${operacion}`,
+          resultado_formateado: `$${resultado}`
+        });
       }
     });
 
@@ -459,71 +439,156 @@ app.post('/api/chat', async (req, res) => {
       name: 'confirmar_paso',
       description: 'Marca un paso de configuración como completado (1-5).',
       schema: z.object({
-        paso: z.number(),
+        paso: z.number().min(1).max(5),
         descripcion: z.string()
       }),
       func: async ({ paso, descripcion }) => {
-        return JSON.stringify({ accion: 'paso_completado', paso, descripcion });
+        if (!session.pasos_completados) session.pasos_completados = [];
+        if (!session.pasos_completados.includes(paso)) {
+          session.pasos_completados.push(paso);
+        }
+
+        const todosCompletos = session.pasos_completados.length >= 5;
+
+        // AUTO-TRIGGER: When step 5 is complete, automatically change to attention mode
+        if (paso === 5 && todosCompletos) {
+          session.mode = 'atencion';
+
+          const mensajeBienvenida = `¡Hola! Bienvenido a ${session.config.nombre_restaurante || 'nuestro restaurante'}. Soy ${session.config.nombre_mesero || 'tu mesero digital'} 🤖\n\nEste es nuestro menú:\n${session.config.menu_productos?.map((p, i) => `${i + 1}. ${p.nombre} - $${p.precio}`).join('\n') || 'Menú disponible'}\n\n¿Qué te gustaría ordenar?`;
+
+          saveSession();
+
+          return JSON.stringify({
+            accion: 'configuracion_completada_y_modo_cambiado',
+            paso,
+            descripcion,
+            pasos_completados: session.pasos_completados,
+            configuracion_completa: true,
+            modo: 'atencion',
+            mensaje_bienvenida: mensajeBienvenida,
+            config: session.config
+          });
+        }
+
+        saveSession();
+        return JSON.stringify({
+          accion: 'paso_completado',
+          paso,
+          descripcion,
+          pasos_completados: session.pasos_completados,
+          configuracion_completa: todosCompletos
+        });
       }
     });
 
     const cambiarModoTool = new DynamicStructuredTool({
       name: 'cambiar_modo',
-      description: 'Cambia entre modo "configuracion" y "atencion".',
+      description: 'Cambia entre modo "configuracion" y "atencion". SOLO usa cuando TODOS los 5 pasos estén completados.',
       schema: z.object({
         modo: z.enum(['configuracion', 'atencion']),
         mensaje: z.string()
       }),
       func: async ({ modo, mensaje }) => {
+        // Verify all steps are complete before allowing mode change
+        const pasosCompletos = session.pasos_completados?.length >= 5;
+
+        if (modo === 'atencion' && !pasosCompletos) {
+          return JSON.stringify({
+            accion: 'modo_no_cambiado',
+            error: 'Debes completar los 5 pasos de configuración primero',
+            pasos_completados: session.pasos_completados || [],
+            pasos_faltantes: 5 - (session.pasos_completados?.length || 0)
+          });
+        }
+
         session.mode = modo;
         saveSession();
-        return JSON.stringify({ accion: 'modo_cambiado', modo, mensaje });
+
+        // Generate welcome message for attention mode
+        const mensajeBienvenida = modo === 'atencion'
+          ? `¡Hola! Bienvenido a ${session.config.nombre_restaurante || 'nuestro restaurante'}. Soy ${session.config.nombre_mesero || 'tu mesero digital'} 🤖\n\nEste es nuestro menú:\n${session.config.menu_productos?.map((p, i) => `${i + 1}. ${p.nombre} - $${p.precio}`).join('\n') || 'Menú disponible'}\n\n¿Qué te gustaría ordenar?`
+          : mensaje;
+
+        return JSON.stringify({
+          accion: 'modo_cambiado',
+          modo,
+          mensaje: mensajeBienvenida,
+          mensaje_bienvenida: mensajeBienvenida,
+          config: session.config
+        });
       }
     });
 
     const tomarPedidoTool = new DynamicStructuredTool({
       name: 'tomar_pedido',
-      description: 'Registra un pedido. ÚSALO SIEMPRE que el cliente pida algo.',
+      description: 'Registra un pedido COMPLETO con todos los detalles. Incluye productos, precios, modalidad de entrega, dirección y forma de pago.',
       schema: z.object({
-        productos: z.array(z.string()),
-        cantidad_total: z.number()
+        productos: z.array(z.string()).describe('Lista de nombres de productos pedidos'),
+        productos_detalle: z.array(z.object({
+          nombre: z.string(),
+          precio: z.number()
+        })).optional().describe('Lista detallada de productos con precios'),
+        cantidad_total: z.number().describe('Cantidad total de items'),
+        total: z.number().describe('Total a pagar en pesos (usa la herramienta calcular para obtener este número)'),
+        modalidad: z.enum(['domicilio', 'sucursal']).describe('Modalidad de entrega'),
+        direccion_cliente: z.string().optional().describe('Dirección de entrega si es a domicilio'),
+        forma_pago: z.enum(['efectivo', 'tarjeta', 'transferencia']).describe('Forma de pago elegida')
       }),
-      func: async ({ productos, cantidad_total }) => {
+      func: async ({ productos, productos_detalle, cantidad_total, total, modalidad, direccion_cliente, forma_pago }) => {
         const pedido = {
           id: (session.pedidos?.length || 0) + 1,
           productos,
+          productos_detalle: productos_detalle || productos.map(p => ({ nombre: p, precio: 0 })),
           cantidad_total,
+          total,
+          modalidad,
+          direccion_cliente: direccion_cliente || null,
+          direccion_sucursal: session.config.direccion || DEFAULT_ADDRESS.direccion,
+          maps_link: session.config.maps_link || DEFAULT_ADDRESS.maps_link,
+          forma_pago: forma_pago.charAt(0).toUpperCase() + forma_pago.slice(1),
           timestamp: new Date().toISOString(),
-          estado: 'registrado'
+          estado: 'Confirmado'
         };
         if (!session.pedidos) session.pedidos = [];
         session.pedidos.push(pedido);
         saveSession();
-        return JSON.stringify({ accion: 'pedido_registrado', pedido });
+        return JSON.stringify({
+          accion: 'pedido_registrado',
+          pedido,
+          mensaje: `Ticket #${String(pedido.id).padStart(4, '0')} generado exitosamente`
+        });
       }
     });
 
     const sugerirUpsellTool = new DynamicStructuredTool({
       name: 'sugerir_upsell',
-      description: 'Muestra opciones de upselling (bebidas, postres) configuradas.',
+      description: 'Sugiere productos adicionales al cliente. Usa los productos de upselling configurados.',
       schema: z.object({
-        productos_sugeridos: z.array(z.string())
+        productos_sugeridos: z.array(z.string()).describe('Productos a sugerir con sus precios')
       }),
       func: async ({ productos_sugeridos }) => {
-        return JSON.stringify({ accion: 'upsell_sugerido', productos_sugeridos });
+        const upsellingConfig = session.config.productos_upselling || [];
+        return JSON.stringify({
+          accion: 'upsell_sugerido',
+          productos_sugeridos,
+          productos_disponibles: upsellingConfig
+        });
       }
     });
 
     const tools = [
+      configuracionRapidaTool,
+      activarModoAtencionTool,
       updateConfigTool,
+      generarMenuTool,
+      generarUpsellingTool,
+      calcularTool,
       mostrarOpcionesTool,
       confirmarPasoTool,
       cambiarModoTool,
       tomarPedidoTool,
       sugerirUpsellTool
     ];
-
-    // --- AGENT EXECUTION ---
 
     const agent = await createOpenAIFunctionsAgent({
       llm,
@@ -535,25 +600,21 @@ app.post('/api/chat', async (req, res) => {
       agent,
       tools,
       verbose: true,
-      returnIntermediateSteps: true, // IMPORTANT: Allows frontend to see tool calls
-      maxIterations: 5
+      returnIntermediateSteps: true,
+      maxIterations: 10
     });
 
-    // Provide context about current state in the input or system prompt update?
-    // We'll stick to history, but we can verify mode logic in prompt
-    // Let's rely on the predefined prompt but ensure the Agent knows it MUST use tools.
-
-    // Inject current state into "system" context if possible, or just trust the history?
-    // Let's trust history but if mode is attention, we should hint it.
     let systemSuffix = "";
     if (session.mode === 'atencion') {
-      systemSuffix = " [SISTEMA: ESTÁS EN MODO ATENCIÓN. ACTÚA COMO MESERO. NO CONFIGURES NADA. SI PIDEN ALGO, USA tomar_pedido.]";
+      systemSuffix = " [MODO: atencion - Atiende pedidos]";
+    } else {
+      systemSuffix = ` [MODO: configuracion]`;
     }
 
     const result = await agentExecutor.invoke({
       input: message + systemSuffix,
       chat_history: session.history.slice(-15),
-      system_state: `Modo: ${session.mode}, Configuración: ${JSON.stringify(session.config)}`
+      system_state: `Modo: ${session.mode}, Pasos completados: ${JSON.stringify(session.pasos_completados || [])}, Configuración: ${JSON.stringify(session.config)}`
     });
 
     session.history.push(new AIMessage(result.output));
@@ -562,7 +623,6 @@ app.post('/api/chat', async (req, res) => {
     if (result.intermediateSteps) {
       for (const step of result.intermediateSteps) {
         try {
-          // Langchain intermediate steps: step.action (tool, toolInput, log) and step.observation (output)
           const toolResult = typeof step.observation === 'string' ? JSON.parse(step.observation) : step.observation;
           toolCalls.push({
             tool: step.action.tool,
@@ -579,8 +639,6 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // Parseo manual de acciones (Fallback)
-    // Pasamos toolCalls para que el fallback sepa si ya se ejecutó algo
     const autoActions = parseAutoActions(message, result.output, session, toolCalls.length > 0);
 
     res.json({
@@ -590,7 +648,8 @@ app.post('/api/chat', async (req, res) => {
       sessionState: {
         config: session.config,
         mode: session.mode,
-        pedidos: session.pedidos
+        pedidos: session.pedidos,
+        pasos_completados: session.pasos_completados || []
       }
     });
 
@@ -603,55 +662,24 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// Función para parsear acciones automáticamente del texto
-function parseAutoActions(userMessage, agentResponse, session, toolCallsExecuted) {
-  const actions = [];
-  const lowerResponse = agentResponse.toLowerCase();
-
-  // Fallback mode change if LLM forgets to call tool but says it's ready
-  // We check for "listo" AND some indication of being configured or ready to serve
-  if ((!session.mode || session.mode === 'configuracion')) {
-    // Broaden criteria: "listo" + "configurado" OR "listo" + "atender" OR "ya estoy listo"
-    if ((lowerResponse.includes('listo') || lowerResponse.includes('excelente') || lowerResponse.includes('perfecto')) &&
-      (lowerResponse.includes('configurado') || lowerResponse.includes('atender') || lowerResponse.includes('actúa'))) {
-
-      if (session.mode !== 'atencion') {
-        session.mode = 'atencion';
-        actions.push({
-          tipo: 'modo_cambiado',
-          modo: 'atencion'
-        });
-        // Force save session here just in case
-        try {
-          const fs = require('fs');
-          const path = require('path');
-          fs.writeFileSync(path.join(__dirname, 'sessions.json'), JSON.stringify(require('./server').sessions || {}, null, 2));
-        } catch (e) { }
-      }
-    }
-  }
-
-  // Fallback logic for detecting orders REMOVED to avoid false positives (e.g. "Si" becoming a ticket)
-  // We rely significantly on the Agent Prompt and Tools now.
-
-  return actions;
-}
-
 app.get('/api/session/:sessionId', (req, res) => {
   const { sessionId } = req.params;
-  const session = sessions[sessionId] || { config: {}, mode: 'configuracion', pedidos: [] };
+  const session = sessions[sessionId] || {
+    config: {},
+    mode: 'configuracion',
+    pedidos: [],
+    pasos_completados: []
+  };
   res.json(session);
 });
 
 const PORT = process.env.PORT || 3000;
 
-// Solo iniciar el servidor si NO estamos en un entorno serverless (Vercel)
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-    console.log(`💬 Demo del Mesero Digital Colmena lista!`);
+    console.log(`🚀 Servidor COLMENA corriendo en http://localhost:${PORT}`);
+    console.log(`💬 Mesero Digital listo para atender!`);
   });
 }
 
-// Exportar la app para Vercel
 module.exports = app;

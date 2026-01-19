@@ -1,23 +1,44 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mesero Digital Colmena - Demo Interactiva</title>
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#6B1FC0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description"
+        content="Mesero Digital Colmena - Agente de IA para restaurantes que atiende pedidos 24/7 por WhatsApp">
+
+    <title>Mesero Digital | COLMENA</title>
+
+    <!-- Favicon -->
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍽️</text></svg>">
+
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <div class="container">
         <!-- Header -->
         <header class="header">
             <div class="logo">
-                <h1>🍔 Mesero Digital Colmena</h1>
-                <p>Demo Interactiva - Mesero 24/7 con IA</p>
+                <div class="logo-icon">🍽️</div>
+                <div class="logo-text">
+                    <h1>COLMENA</h1>
+                    <p>Mesero Digital 24/7 con IA</p>
+                </div>
             </div>
             <div class="status-badge" id="statusBadge">
                 <span class="status-dot"></span>
-                <span id="modeText">Modo: Configuración</span>
+                <span id="modeText">Configuración</span>
             </div>
+            <!-- Mobile toggle button for panel -->
+            <button class="mobile-panel-toggle" id="mobilePanelToggle" onclick="toggleActionsPanel()">
+                <span id="panelToggleIcon">📋</span>
+            </button>
         </header>
 
         <div class="main-content">
@@ -25,7 +46,9 @@
             <div class="chat-section">
                 <div class="chat-header">
                     <h2>💬 Chat con el Mesero</h2>
-                    <button class="btn-reset" onclick="resetSession()">🔄 Nueva Sesión</button>
+                    <button class="btn-reset" onclick="resetSession()">
+                        🔄 <span class="reset-text">Nueva Sesión</span>
+                    </button>
                 </div>
 
                 <div class="chat-messages" id="chatMessages">
@@ -37,23 +60,21 @@
                 </div>
 
                 <div class="chat-input-container">
-                    <input
-                        type="text"
-                        id="messageInput"
-                        placeholder="Escribe tu mensaje aquí..."
-                        onkeypress="handleKeyPress(event)"
-                    >
+                    <input type="text" id="messageInput" placeholder="Escribe tu mensaje..."
+                        onkeypress="handleKeyPress(event)" autocomplete="off" autocorrect="off"
+                        autocapitalize="sentences">
                     <button onclick="sendMessage()" class="btn-send">
-                        Enviar ➤
+                        <span class="send-text">Enviar</span> ➤
                     </button>
                 </div>
             </div>
 
             <!-- Actions Panel -->
-            <div class="actions-panel">
+            <div class="actions-panel" id="actionsPanel">
                 <div class="panel-header">
                     <h2>⚡ Acciones del Agente</h2>
                     <p class="subtitle">Visualización en tiempo real</p>
+                    <button class="mobile-close-panel" onclick="toggleActionsPanel()">✕</button>
                 </div>
 
                 <!-- Configuration Display -->
@@ -73,6 +94,10 @@
                             <span class="config-value">No configurado</span>
                         </div>
                         <div class="config-item empty">
+                            <span class="config-label">Menú</span>
+                            <span class="config-value">No configurado</span>
+                        </div>
+                        <div class="config-item empty">
                             <span class="config-label">Productos Upselling</span>
                             <span class="config-value">No configurado</span>
                         </div>
@@ -80,32 +105,9 @@
                             <span class="config-label">Horarios</span>
                             <span class="config-value">No configurado</span>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Progress Tracker -->
-                <div class="progress-tracker" id="progressTracker">
-                    <h3>📊 Progreso de Configuración</h3>
-                    <div class="progress-steps">
-                        <div class="step" data-step="1">
-                            <div class="step-circle">1</div>
-                            <span>Presentación</span>
-                        </div>
-                        <div class="step" data-step="2">
-                            <div class="step-circle">2</div>
-                            <span>Nombre</span>
-                        </div>
-                        <div class="step" data-step="3">
-                            <div class="step-circle">3</div>
-                            <span>Productos</span>
-                        </div>
-                        <div class="step" data-step="4">
-                            <div class="step-circle">4</div>
-                            <span>Upselling</span>
-                        </div>
-                        <div class="step" data-step="5">
-                            <div class="step-circle">5</div>
-                            <span>Horarios</span>
+                        <div class="config-item empty">
+                            <span class="config-label">Dirección</span>
+                            <span class="config-value">No configurado</span>
                         </div>
                     </div>
                 </div>
@@ -131,4 +133,5 @@
 
     <script src="script.js"></script>
 </body>
+
 </html>
