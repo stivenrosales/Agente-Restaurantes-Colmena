@@ -90,12 +90,12 @@ body {
 
 /* Header */
 .header {
-    background: linear-gradient(135deg, var(--colmena-gold) 0%, var(--colmena-gold-dark) 100%);
-    padding: 20px 24px;
+    background: linear-gradient(135deg, #D5AF5B 0%, #B5914A 100%);
+    padding: 16px 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: var(--shadow-gold);
+    box-shadow: 0 4px 14px rgba(213, 175, 91, 0.4);
     position: relative;
     overflow: hidden;
     flex-shrink: 0;
@@ -108,7 +108,7 @@ body {
     right: -20%;
     width: 60%;
     height: 200%;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, transparent 50%);
     transform: rotate(-15deg);
     pointer-events: none;
 }
@@ -116,36 +116,15 @@ body {
 .logo {
     display: flex;
     align-items: center;
-    gap: 12px;
     z-index: 1;
 }
 
-.logo-icon {
-    width: 48px;
-    height: 48px;
-    background: var(--white);
-    border-radius: var(--radius-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    box-shadow: var(--shadow-md);
-}
-
-.logo-text h1 {
-    font-family: var(--font-brand);
-    font-size: 22px;
-    font-weight: 900;
-    color: var(--white);
-    letter-spacing: -0.5px;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.15);
-}
-
-.logo-text p {
-    font-family: var(--font-body);
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 12px;
-    font-weight: 500;
+.logo-icon-img {
+    width: 50px;
+    height: 50px;
+    object-fit: contain;
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
 }
 
 .status-badge {
@@ -1243,22 +1222,12 @@ body {
     }
 
     .logo {
-        gap: 10px;
         flex: 1;
     }
 
-    .logo-icon {
-        width: 40px;
-        height: 40px;
-        font-size: 22px;
-    }
-
-    .logo-text h1 {
-        font-size: 18px;
-    }
-
-    .logo-text p {
-        font-size: 11px;
+    .logo-icon-img {
+        width: 44px;
+        height: 44px;
     }
 
     .status-badge {
@@ -1479,12 +1448,9 @@ body {
         font-size: 20px;
     }
 
-    .logo-text h1 {
-        font-size: 16px;
-    }
-
-    .logo-text p {
-        display: none;
+    .logo-icon-img {
+        width: 36px;
+        height: 36px;
     }
 
     .status-badge {
@@ -1534,18 +1500,9 @@ body {
         padding: 10px 16px;
     }
 
-    .logo-icon {
+    .logo-icon-img {
         width: 32px;
         height: 32px;
-        font-size: 18px;
-    }
-
-    .logo-text h1 {
-        font-size: 16px;
-    }
-
-    .logo-text p {
-        display: none;
     }
 
     .chat-messages {
